@@ -1,0 +1,7 @@
+site_name: techsupport
+site_description: 
+repo_url: https:///https://github.com/glroland/techsupport
+edit_uri: edit/main/docs
+
+plugins:
+  - techdocs-core

@@ -1,0 +1,6 @@
+ipykernel
+pylint
+openai
+streamlit
+watchdog
+

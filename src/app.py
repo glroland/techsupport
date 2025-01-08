@@ -4,14 +4,41 @@
 """
 import streamlit as st
 from openai import OpenAI
+import json
+import logging
+import sys
+
+logger = logging.getLogger(__name__)
+
+SYSTEM_PROMPT = """
+You are a technical expert specializing in Spring Boot microservices, PostgreSQL databases, and Linux systems. Your task is to analyze the provided log file snippet and diagnose the cause of the system outage. Your response should follow this JSON format:
+{
+  "rootCause": "",
+  "escalateTo": "",
+  "remediationSteps": []
+}
+Describe the root cause of the issue in the 'rootCause' field, providing a concise textual explanation based on the log file snippet.
+Identify the best-suited role to address the issue in the 'escalateTo' field (Developer, DBA, Server Engineer, Network Engineer, DevOps Engineer).
+List recommended steps for additional analysis or remediation in the 'remediationSteps' array, providing actionable text strings that could help resolve the incident or gather more information.
+"""
+
+# Log info and higher to the console
+console = logging.StreamHandler(sys.stdout)
+console.setLevel(logging.INFO)
+logging.getLogger().addHandler(console)
+
+st.set_page_config(page_title="Tech Support Genius",
+                   layout="centered",
+                   initial_sidebar_state="collapsed",
+                   menu_items=None)
 
 with st.sidebar:
     openai_api_url = st.text_input(label="OpenAI API URL",
                                    key="openai_api_url",
-                                   value="http://envision:8000/v1")
+                                   value="http://envision:11434/v1")
     openai_api_model_name = st.text_input(label="Model Name",
                                           key="openai_api_model_name",
-                                          value="meta-llama/Meta-Llama-3.1-8B-Instruct")
+                                          value="granite3.1-dense:8b")
     openai_max_tokens = st.number_input(label="Max Tokens",
                                         min_value=1,
                                         max_value=10000,
@@ -23,25 +50,12 @@ with st.sidebar:
                                          value=0.8,
                                          step=0.1)
 
-
-st.title("💬 techsupport Agent")
-
-system_prompt_showhide = st.empty()
-system_prompt_container = system_prompt_showhide.container()
-system_prompt = system_prompt_container.text_area(label="System Prompt",
-                key="system_prompt",
-                value="You are a helpful sales agent for a shoe store, who is always " +
-                      "positive and never participates in negative conversations. " +
-                      "Only participate in conversations related to shoes and the store.")
+st.title("💬 Tech Support Genius")
 
 if "messages" not in st.session_state:
-    st.session_state["messages"] = [{"role": "assistant", "content": system_prompt}]
+    st.session_state["messages"] = []
 
-if prompt := st.chat_input():
-
-    system_prompt_showhide.empty()
-    if 'system_prompt' in st.session_state and st.session_state.system_prompt is True:
-        st.session_state.system_prompt = True
+if prompt := st.chat_input("Enter stack trace, log snippet, or other details about the outage event"):
 
     for msg in st.session_state.messages:
         st.chat_message(msg["role"]).write(msg["content"])
@@ -50,10 +64,31 @@ if prompt := st.chat_input():
                     api_key="api-key")
     st.session_state.messages.append({"role": "user", "content": prompt})
     st.chat_message("user").write(prompt)
+
+    messages = [{"role": "assistant", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": prompt}]
+    logging.info(f"Request: {messages}")
+
     response = client.chat.completions.create(model=openai_api_model_name,
-                                              messages=st.session_state.messages,
+                                              messages=messages,
                                               max_tokens=openai_max_tokens,
                                               temperature=openai_temperature)
     msg = response.choices[0].message.content
     st.session_state.messages.append({"role": "assistant", "content": msg})
-    st.chat_message("assistant").write(msg)
+
+    logging.info(f"Response: {msg}")
+
+    with st.chat_message("assistant"):
+        msg_obj = json.loads(msg)
+
+        root_cause = msg_obj["rootCause"]
+        escalate_to = msg_obj["escalateTo"]
+        remediation_steps = msg_obj["remediationSteps"]
+
+        st.write(f"**Root Cause:** {root_cause}")
+        st.write(f"**Escalation Path:** {escalate_to}")
+        st.write(f"**Remediation Steps:**")
+        i = 0
+        for step in remediation_steps:
+            i += 1
+            st.write(f"{i}. {step}")
